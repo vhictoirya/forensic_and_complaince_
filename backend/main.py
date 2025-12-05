@@ -15,7 +15,7 @@ load_dotenv()
 
 app = FastAPI(
     title="Blockchain Forensics and Compliance APP",
-    version="2.0.0",
+    version="1.0.0",
     description="Transaction monitoring and risk analysis"
 )
 
@@ -253,7 +253,9 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
         decoded_call = tx_data.get("decoded_call")
         if decoded_call:
             method_label = decoded_call.get("label", "Unknown")
-            flags.append(f"📝 Smart contract interaction: {method_label}")
+            # Ignore standard methods for risk flagging
+            if method_label.lower() not in ["transfer", "approve"]:
+                flags.append(f"📝 Smart contract interaction: {method_label}")
         
         # Parse token transfers
         token_transfers = []
@@ -469,4 +471,4 @@ if __name__ == "__main__":
     except:
         pass
     
-    uvicorn.run(app, host="0.0.0.0", port=8005)
+    uvicorn.run(app, host="0.0.0.0", port=8007)
