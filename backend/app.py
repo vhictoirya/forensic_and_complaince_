@@ -1,5 +1,4 @@
-# main.py - Enhanced Blockchain Forensics API with Deep Analysis
-# Install: pip install fastapi uvicorn requests python-dotenv
+# Blockchain Forensics APP with Deep Analysis
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,29 +10,33 @@ import requests
 import os
 from dotenv import load_dotenv
 
+# Load environment variables from the .env file
 load_dotenv()
 
+# Initialize the FastAPI application with metadata
 app = FastAPI(
-    title="Enhanced Blockchain Forensics & Compliance API",
-    version="2.0.0",
+    title="Blockchain Forensics & Compliance APP",
+    version="1.0.0",
     description="Advanced transaction monitoring with deep event analysis and pattern detection"
 )
 
+# Configure CORS (Cross-Origin Resource Sharing) middleware
+# This allows the frontend (likely running on a different port/domain) to communicate with this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],  # Allow all origins (for development)
+    allow_credentials=True, # Allow sending cookies/credentials
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
 )
 
-# Moralis configuration
 MORALIS_API_KEY = os.getenv("MORALIS_KEY")
 MORALIS_BASE_URL = "https://deep-index.moralis.io/api/v2.2"
+
 if not MORALIS_API_KEY or MORALIS_API_KEY == "MORALIS_KEY":
     raise ValueError("❌ MORALIS_KEY not found in .env file")
 
-# Critical watchlists - Layered approach (static + Moralis labels)
+# Define a dictionary of sanctioned addresses (e.g., Tornado Cash, known hackers)
 SANCTIONS_LIST = {
     "0x8576acc5c05d6ce88f4e49bf65bde93d537e45d1": "OFAC Sanctioned - Tornado Cash",
     "0x722122df12d4e14e13ac3b6895a86e84145b6967": "OFAC Sanctioned - Tornado Cash",
@@ -42,7 +45,7 @@ SANCTIONS_LIST = {
     "0x098b716b8aaf21512996dc57eb0615e2383e2f96": "Sanctioned - Mixer Service"
 }
 
-# Known mixer addresses (static list for guaranteed detection)
+# Known Mixer Addresses (Static list for guaranteed detection of common mixers)
 MIXER_ADDRESSES = {
     "0x8576acc5c05d6ce88f4e49bf65bde93d537e45d1": "Tornado Cash Router",
     "0x722122df12d4e14e13ac3b6895a86e84145b6967": "Tornado Cash",
@@ -51,7 +54,7 @@ MIXER_ADDRESSES = {
     "0x12d66f87a04a9e220743712ce6d9bb1b5616b8fc": "Tornado Cash Pool"
 }
 
-# Known exchange addresses (static list as fallback)
+# Known Exchange Addresses (Static list)
 KNOWN_EXCHANGES = {
     "0x3f5ce5fbfe3e9af3971dd833d26ba9b5c936f0be": "Binance Hot Wallet",
     "0x28c6c06298d514db089934071355e5743bf21d60": "Binance 14",
@@ -61,30 +64,30 @@ KNOWN_EXCHANGES = {
     "0x267be1c1d684f78cb4f6a176c4911b741e4ffdc0": "Bitfinex Hot Wallet"
 }
 
-# High-risk method patterns
+# High-Risk Method Patterns (Identify suspicious smart contract interactions)
 HIGH_RISK_METHODS = {
     "delegatecall", "selfdestruct", "create2", "suicide",
     "callcode", "destroy", "destroyAndSend"
 }
 
-# Mixer/privacy protocol identifiers (for keyword matching)
+# Mixer/Privacy Protocol Identifiers (Keywords to check against labels)
 MIXER_KEYWORDS = ["tornado", "mixer", "tumbler", "privacy", "blender", "anonymizer"]
 
-# Pydantic Models
+# Pydantic Models for Data Validation and Schema Documentation
 class TokenFlow(BaseModel):
-    token_address: str
-    token_symbol: Optional[str]
-    from_address: str
-    to_address: str
-    amount: str
-    amount_formatted: str
-    hop_number: int
+    token_address: str         
+    token_symbol: Optional[str] 
+    from_address: str         
+    to_address: str            
+    amount: str                
+    amount_formatted: str     
+    hop_number: int           
 
 class EventAnalysis(BaseModel):
-    event_type: str
-    count: int
-    risk_flags: List[str]
-    details: List[Dict[str, Any]]
+    event_type: str           
+    count: int                
+    risk_flags: List[str]      
+    details: List[Dict[str, Any]] 
 
 class TransactionDetails(BaseModel):
     from_address: str
@@ -93,36 +96,36 @@ class TransactionDetails(BaseModel):
     to_address: Optional[str]
     to_label: Optional[str]
     to_entity: Optional[str]
-    value: str
+    value: str                 
     block_number: int
-    block_timestamp: str
+    block_timestamp: str       
     gas_used: str
     gas_price: str
     transaction_fee: str
-    nonce: int
-    decoded_call: Optional[Dict]
-    token_flows: List[TokenFlow]
-    total_hops: int
+    nonce: int                 # Transaction count for sender
+    decoded_call: Optional[Dict] # Details of the function called
+    token_flows: List[TokenFlow] 
+    total_hops: int            # Total number of transfers
 
 class AnalysisResult(BaseModel):
     tx_hash: str
-    risk_score: int
-    risk_level: str
-    risk_factors: List[str]
-    flags: List[str]
+    risk_score: int            # Calculated risk (0-100)
+    risk_level: str            # LOW, MEDIUM, HIGH, CRITICAL
+    risk_factors: List[str]    # Explanations for risk score
+    flags: List[str]           # Specific warning flags
     details: TransactionDetails
     event_analysis: List[EventAnalysis]
-    sanctions_check: bool
-    mixer_interaction: bool
-    exchange_interaction: bool
-    entity_labels: List[str]
-    complexity_score: int
-    timing_flags: List[str]
+    sanctions_check: bool      # True if involves sanctioned entity
+    mixer_interaction: bool    # True if involves mixer
+    exchange_interaction: bool # True if involves exchange
+    entity_labels: List[str]   # Labels found for involved addresses
+    complexity_score: int      # Score based on tx complexity
+    timing_flags: List[str]    # Alerts regarding timing (e.g., late night)
 
 class TimePattern(BaseModel):
     tx_per_hour: float
-    burst_detected: bool
-    suspicious_timing: bool
+    burst_detected: bool       # True if rapid succession of txs
+    suspicious_timing: bool    # True if unusual hours
     time_details: str
 
 class AddressTransaction(BaseModel):
@@ -137,7 +140,7 @@ class AddressTransaction(BaseModel):
 
 class AddressAnalysis(BaseModel):
     address: str
-    address_label: Optional[str]
+    address_label: Optional[str] # Known label for the address
     total_transactions: int
     risk_score: int
     risk_level: str
@@ -145,13 +148,13 @@ class AddressAnalysis(BaseModel):
     flags: List[str]
     entity_labels: List[str]
     recent_transactions: List[AddressTransaction]
-    high_risk_counterparties: List[str]
+    high_risk_counterparties: List[str] # List of risky addresses interacted with
     sanctions_check: bool
     mixer_interaction: bool
     time_patterns: TimePattern
-    behavior_summary: Dict[str, Any]
+    behavior_summary: Dict[str, Any] # Aggregate behavioral stats
 
-# Helper functions
+# Helper Functions
 def moralis_request(endpoint: str, params: Dict = None) -> Dict:
     """Make request to Moralis API with error handling"""
     headers = {
@@ -162,14 +165,22 @@ def moralis_request(endpoint: str, params: Dict = None) -> Dict:
     
     try:
         response = requests.get(url, headers=headers, params=params, timeout=15)
+        if response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Resource not found on the specified chain")
         response.raise_for_status()
         return response.json()
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+             raise HTTPException(status_code=404, detail="Resource not found on the specified chain")
+        raise HTTPException(status_code=e.response.status_code, detail=f"Moralis API error: {str(e)}")
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Moralis API error: {str(e)}")
 
 def check_sanctions(address: str) -> tuple[bool, Optional[str]]:
     """Check if address is on OFAC sanctions list"""
+    # Normalize address to lowercase for comparison
     addr_lower = address.lower()
+    # Check against local static list
     if addr_lower in SANCTIONS_LIST:
         return True, SANCTIONS_LIST[addr_lower]
     return False, None
@@ -180,10 +191,11 @@ def extract_moralis_labels(tx_data: Dict) -> tuple[List[str], bool, bool]:
     is_mixer = False
     is_exchange = False
     
+    # Get addresses from transaction data
     from_addr = tx_data.get("from_address", "").lower()
     to_addr = tx_data.get("to_address", "").lower()
     
-    # Layer 1: Check static lists first (guaranteed detection)
+    # Check static lists first
     if from_addr in MIXER_ADDRESSES:
         labels.append(f"🔄 From: {MIXER_ADDRESSES[from_addr]} (static list)")
         is_mixer = True
@@ -191,6 +203,7 @@ def extract_moralis_labels(tx_data: Dict) -> tuple[List[str], bool, bool]:
         labels.append(f"🔄 To: {MIXER_ADDRESSES[to_addr]} (static list)")
         is_mixer = True
     
+    # Check if addresses are known exchanges (from static list)
     if from_addr in KNOWN_EXCHANGES:
         labels.append(f"🏦 From: {KNOWN_EXCHANGES[from_addr]} (static list)")
         is_exchange = True
@@ -198,7 +211,7 @@ def extract_moralis_labels(tx_data: Dict) -> tuple[List[str], bool, bool]:
         labels.append(f"🏦 To: {KNOWN_EXCHANGES[to_addr]} (static list)")
         is_exchange = True
     
-    # Layer 2: Moralis labels (broader coverage)
+    # Check sender label
     if tx_data.get("from_address_label"):
         from_label = tx_data["from_address_label"]
         labels.append(f"📤 From: {from_label}")
@@ -207,10 +220,12 @@ def extract_moralis_labels(tx_data: Dict) -> tuple[List[str], bool, bool]:
         if "exchange" in from_label.lower():
             is_exchange = True
     
+    # Check sender entity name
     if tx_data.get("from_address_entity"):
         from_entity = tx_data["from_address_entity"]
         labels.append(f"🏢 From Entity: {from_entity}")
     
+    # Check receiver label
     if tx_data.get("to_address_label"):
         to_label = tx_data["to_address_label"]
         labels.append(f"📥 To: {to_label}")
@@ -219,6 +234,7 @@ def extract_moralis_labels(tx_data: Dict) -> tuple[List[str], bool, bool]:
         if "exchange" in to_label.lower() or "binance" in to_label.lower() or "kraken" in to_label.lower():
             is_exchange = True
     
+    # Check receiver entity name
     if tx_data.get("to_address_entity"):
         to_entity = tx_data["to_address_entity"]
         labels.append(f"🏢 To Entity: {to_entity}")
@@ -228,99 +244,117 @@ def extract_moralis_labels(tx_data: Dict) -> tuple[List[str], bool, bool]:
     return labels, is_mixer, is_exchange
 
 def analyze_events(logs: List[Dict]) -> tuple[List[EventAnalysis], List[str]]:
-    """Deep analysis of all transaction events"""
+    """Deep analysis of all transaction events (logs)"""
     event_counts = defaultdict(list)
     flags = []
     
+    # Iterate through all event logs
     for log in logs:
         decoded = log.get("decoded_event")
+        # Skip if event wasn't decoded (unknown signature)
         if not decoded:
             continue
         
+        # Get event name (e.g., Transfer, Approval)
         event_type = decoded.get("label", "Unknown")
+        # Extract parameters into a dictionary
         params = {p["name"]: p["value"] for p in decoded.get("params", [])}
         
+        # Group events by type
         event_counts[event_type].append({
             "address": log.get("address"),
             "params": params,
             "log_index": log.get("log_index")
         })
     
-    # Analyze each event type
+    # Analyze each event type group
     analyses = []
     
     for event_type, occurrences in event_counts.items():
         event_flags = []
         
+        # Check for dangerous Approvals (infinite allowance)
         if event_type == "Approval":
+            # Check for very large amounts (near uint256 max)
             unlimited = sum(1 for e in occurrences 
                           if int(e["params"].get("amount", 0)) > 1e50)
             if unlimited > 0:
                 event_flags.append(f"{unlimited} unlimited approval(s)")
                 flags.append(f"⚠️ {unlimited} unlimited token approval(s) detected")
         
+        # Check for complex Transfer patterns
         elif event_type == "Transfer":
-            # Analyze transfer patterns
+            # Count how many distinct tokens were moved
             unique_tokens = len(set(e["address"] for e in occurrences))
             if unique_tokens > 5:
                 event_flags.append(f"Multiple tokens: {unique_tokens}")
                 flags.append(f"🔄 Complex flow: {unique_tokens} different tokens")
         
+        # Check for Swaps (DEX interactions)
         elif event_type in ["Swap", "Swapped"]:
+            # Check if there are many swaps in one tx (routing?)
             if len(occurrences) > 3:
                 event_flags.append(f"Multi-hop swap: {len(occurrences)} swaps")
                 flags.append(f"🔄 Complex DEX routing: {len(occurrences)} swap hops")
         
+        # Check for large Withdrawals
         elif event_type == "Withdrawal":
+            # Identify large outbound native token moves
             large_withdrawals = sum(1 for e in occurrences 
-                                   if int(e["params"].get("wad", 0)) > 1e20)
+                                   if int(e["params"].get("wad", 0)) > 1e20) # > 100 ETH
             if large_withdrawals > 0:
                 event_flags.append(f"{large_withdrawals} large withdrawal(s)")
         
+        # Append analysis for this event type
         analyses.append(EventAnalysis(
             event_type=event_type,
             count=len(occurrences),
             risk_flags=event_flags,
-            details=occurrences[:3]  # First 3 occurrences
+            details=occurrences[:3]  # Return details for First 3 occurrences only
         ))
     
     return analyses, flags
 
 def build_token_flow_graph(logs: List[Dict]) -> tuple[List[TokenFlow], int, List[str]]:
-    """Build token flow graph and detect patterns"""
+    """Build a graph of token flows and detect cyclic patterns"""
     flows = []
     flags = []
     hop_number = 0
     seen_addresses = set()
     
+    # Iterate through logs to find Transfer events
     for log in logs:
         decoded = log.get("decoded_event")
+        # Only interested in standard ERC20 Transfers
         if not decoded or decoded.get("label") != "Transfer":
             continue
         
         params = {p["name"]: p["value"] for p in decoded.get("params", [])}
+        # Ensure 'from' and 'to' params exist
         if not all(k in params for k in ["from", "to"]):
             continue
         
         hop_number += 1
         from_addr = params["from"]
         to_addr = params["to"]
+        # Handle 'value' vs 'amount' naming for different standards
         amount = params.get("value", params.get("amount", 0))
         
-        # Track for circular flow detection
+        # Track addresses for circular flow detection (Wash Trading Pattern)
         seen_addresses.add(from_addr.lower())
         if to_addr.lower() in seen_addresses:
             flags.append("⚠️ Circular token flow detected (potential wash trading)")
         seen_addresses.add(to_addr.lower())
         
-        # Format amount
+        # Format amount to human-readable (assuming 18 decimals default)
         try:
             amount_int = int(amount)
-            decimals = 18  # Default, could be improved with token metadata
+            decimals = 18  # Default, could be improved with token metadata fetch
             amount_formatted = f"{amount_int / (10 ** decimals):.6f}"
         except:
             amount_formatted = str(amount)
         
+        # Add to flow list
         flows.append(TokenFlow(
             token_address=log.get("address", ""),
             token_symbol=log.get("token_symbol"),
@@ -334,18 +368,19 @@ def build_token_flow_graph(logs: List[Dict]) -> tuple[List[TokenFlow], int, List
     return flows, hop_number, flags
 
 def analyze_timing(timestamp_str: str) -> List[str]:
-    """Analyze transaction timing for suspicious patterns"""
+    """Analyze transaction timing for suspicious patterns (e.g., late night hours)"""
     flags = []
     
     try:
+        # standardizing timestamp format
         dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
         hour = dt.hour
         
-        # Late night activity (2 AM - 5 AM UTC)
+        # Check for Late night activity (2 AM - 5 AM UTC) - often correlates with hack timing
         if 2 <= hour <= 5:
             flags.append(f"🌙 Late-night activity ({hour:02d}:00 UTC)")
         
-        # Weekend activity
+        # Check for Weekend activity (banks closed, less monitoring)
         if dt.weekday() >= 5:
             flags.append("📅 Weekend transaction")
     except:
@@ -354,22 +389,23 @@ def analyze_timing(timestamp_str: str) -> List[str]:
     return flags
 
 def calculate_complexity_score(token_flows: List[TokenFlow], event_count: int) -> int:
-    """Calculate transaction complexity score"""
+    """Calculate a numeric score (0-100) representing transaction complexity"""
     score = 0
     
-    # Multiple hops
+    # Points for number of token hops
     score += min(len(token_flows) * 5, 30)
     
-    # Multiple event types
+    # Points for number of events
     score += min(event_count * 2, 20)
     
-    # Unique addresses involved
+    # Points for number of unique addresses involved
     unique_addrs = len(set(
         [f.from_address for f in token_flows] + 
         [f.to_address for f in token_flows]
     ))
     score += min(unique_addrs * 3, 25)
     
+    # Cap score at 100
     return min(score, 100)
 
 def calculate_advanced_risk_score(
@@ -380,16 +416,16 @@ def calculate_advanced_risk_score(
     complexity: int,
     timing_flags: List[str]
 ) -> tuple[int, List[str]]:
-    """Advanced multi-factor risk scoring"""
+    """Determine final risk score based on weighted factors"""
     score = 0
     factors = []
     
-    # Critical factors
+    # CRITICAL RISK FACTORS
     if sanctions_hit:
         score += 70
         factors.append("🚨 CRITICAL: Sanctioned entity")
     
-    # High risk factors
+    # HIGH RISK FACTORS
     if mixer_hit:
         score += 40
         factors.append("🔄 Mixer/privacy service interaction")
@@ -402,20 +438,23 @@ def calculate_advanced_risk_score(
         score += 25
         factors.append("⚠️ Circular flow pattern")
     
-    # Medium risk factors
+    # MEDIUM RISK FACTORS
     if complexity > 50:
         score += 20
         factors.append(f"📊 High complexity ({complexity}/100)")
     
+    # Large value transfer check
     if any("large" in f.lower() or "high value" in f.lower() for f in flags):
         score += 15
         factors.append("💰 Large value transfer")
     
+    # Timing risks
     if len(timing_flags) > 0:
         score += 10
         factors.append("🕐 Suspicious timing")
     
-    # Positive factors (reduce risk)
+    # POSITIVE FACTORS (Mitigating factors)
+    # Reduce risk if interacting with known safe exchanges
     if any("exchange" in label.lower() for label in entity_labels):
         score = max(0, score - 15)
         factors.append("✅ Known exchange interaction")
@@ -440,23 +479,21 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
     - Multi-factor risk scoring
     """
     try:
-        # Fetch transaction data
         tx_data = moralis_request(
             f"/transaction/{tx_hash}/verbose",
             params={"chain": chain}
         )
         
-        # Extract basic data
         from_addr = tx_data.get("from_address", "")
         to_addr = tx_data.get("to_address", "")
         value_wei = int(tx_data.get("value", 0))
-        value_eth = value_wei / 1e18
+        value_eth = value_wei / 1e18 # Convert Wei to ETH
         nonce = int(tx_data.get("nonce", 0))
         
         # Initialize flags and checks
         flags = []
         
-        # 1. Sanctions check (critical)
+        # Critical Sanctions Check
         from_sanctioned, from_reason = check_sanctions(from_addr)
         to_sanctioned, to_reason = check_sanctions(to_addr)
         sanctions_hit = from_sanctioned or to_sanctioned
@@ -466,29 +503,29 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
         if to_sanctioned:
             flags.append(f"🚨 CRITICAL: To address sanctioned - {to_reason}")
         
-        # 2. Extract Moralis entity labels
+        # Extract Entity Labels (Mixers, Exchanges)
         entity_labels, mixer_hit, exchange_hit = extract_moralis_labels(tx_data)
         
         if mixer_hit:
             flags.append("🔄 Mixer/privacy service detected")
         
-        # 3. Analyze all events
+        # Deep Event Analysis (Logs)
         event_analyses, event_flags = analyze_events(tx_data.get("logs", []))
         flags.extend(event_flags)
         
-        # 4. Build token flow graph
+        # Build Token Flow Graph
         token_flows, total_hops, flow_flags = build_token_flow_graph(
             tx_data.get("logs", [])
         )
         flags.extend(flow_flags)
         
-        # 5. Analyze transaction value
+        # Value Analysis
         if value_eth > 100:
             flags.append(f"💰 Very high value: {value_eth:.2f} ETH (~${value_eth * 2500:.2f})")
         elif value_eth > 10:
             flags.append(f"💰 High value: {value_eth:.2f} ETH")
         
-        # 6. Analyze decoded function call
+        # Analyze Decoded Function Calls (Input Data)
         decoded_call = tx_data.get("decoded_call")
         if decoded_call:
             method = decoded_call.get("label", "").lower()
@@ -497,25 +534,25 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
             if any(risk in method for risk in HIGH_RISK_METHODS):
                 flags.append(f"🚨 HIGH RISK method: {decoded_call.get('label')}")
             
-            # Check parameters for suspicious patterns
+            # Check parameters specifically for 'deadline' (MEV detection)
             params = decoded_call.get("params", [])
             for param in params:
                 if param.get("name") == "deadline":
-                    # Very short deadline might indicate MEV
+                    # Very short deadline relative to timestamp might indicate MEV/Flashbots
                     deadline = int(param.get("value", 0))
-                    if 0 < deadline < 9999999999:
+                    if 0 < deadline < 9999999999: # Simple heuristic
                         flags.append("⚡ Short deadline (possible MEV)")
         
-        # 7. Timing analysis
+        # Timing Analysis
         timing_flags = analyze_timing(tx_data.get("block_timestamp", ""))
         
-        # 8. Calculate complexity
+        # Calculate Complexity Score
         complexity_score = calculate_complexity_score(
             token_flows, 
             len(tx_data.get("logs", []))
         )
         
-        # 9. Calculate risk score
+        # Calculate Overall Risk Score
         risk_score, risk_factors = calculate_advanced_risk_score(
             sanctions_hit,
             mixer_hit,
@@ -525,7 +562,7 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
             timing_flags
         )
         
-        # Determine risk level
+        # Determine Categorical Risk Level
         if risk_score >= 70:
             risk_level = "CRITICAL"
         elif risk_score >= 50:
@@ -535,10 +572,11 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
         else:
             risk_level = "LOW"
         
-        # Add safe indicator if appropriate
+        # Add 'Safe' indicator if score is low and no flags
         if not flags and risk_score < 30:
             flags.append("✅ Standard transaction - no suspicious indicators")
         
+        # Construct and return result object
         return AnalysisResult(
             tx_hash=tx_hash,
             risk_score=risk_score,
@@ -556,7 +594,7 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
                 block_number=tx_data.get("block_number", 0),
                 block_timestamp=tx_data.get("block_timestamp", ""),
                 gas_used=tx_data.get("receipt_gas_used", "0"),
-                gas_price=f"{int(tx_data.get('gas_price', 0)) / 1e9:.2f} Gwei",
+                gas_price=f"{int(tx_data.get('gas_price', 0)) / 1e9:.2f} Gwei", # Convert Wei to Gwei
                 transaction_fee=tx_data.get("transaction_fee", "0"),
                 nonce=nonce,
                 decoded_call=decoded_call,
@@ -592,7 +630,6 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
     - Multi-factor risk scoring
     """
     try:
-        # Fetch address transactions
         tx_data = moralis_request(
             f"/{address}/verbose",
             params={"chain": chain, "limit": limit, "order": "DESC"}
@@ -603,7 +640,7 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
         if not transactions:
             raise HTTPException(status_code=404, detail="No transactions found")
         
-        # Initialize analysis
+        # Initialize analysis counters and lists
         flags = []
         risk_factors = []
         high_risk_counterparties = []
@@ -612,7 +649,7 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
         total_volume = 0
         timestamps = []
         
-        # Check if address itself is sanctioned
+        # Check if target address itself is sanctioned
         addr_sanctioned, addr_reason = check_sanctions(address)
         sanctions_hit = addr_sanctioned
         
@@ -620,16 +657,17 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
             flags.append(f"🚨 CRITICAL: Address is sanctioned - {addr_reason}")
             risk_factors.append("Address on sanctions list")
         
-        # Get address label from first transaction
+        # Determine Label for the Target Address (from own txs)
         address_label = None
         if transactions:
             first_tx = transactions[0]
+            # Check if address was sender in first tx
             if first_tx.get("from_address", "").lower() == address.lower():
                 address_label = first_tx.get("from_address_label")
             else:
                 address_label = first_tx.get("to_address_label")
         
-        # Analyze transaction patterns
+        # Iterate and Analyze Recent Transactions
         recent_txs = []
         entity_interactions = defaultdict(int)
         
@@ -637,10 +675,10 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
             tx_hash = tx.get("hash", "")
             from_addr = tx.get("from_address", "")
             to_addr = tx.get("to_address", "")
-            value = int(tx.get("value", 0)) / 1e18
+            value = int(tx.get("value", 0)) / 1e18 # ETH value
             timestamp = tx.get("block_timestamp", "")
             
-            # Parse timestamp
+            # Parse timestamp for timing analysis
             try:
                 dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                 timestamps.append(dt)
@@ -649,11 +687,11 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
             
             total_volume += value
             
-            # Determine counterparty
+            # Identify Counterparty (the other side of the tx)
             is_outgoing = from_addr.lower() == address.lower()
             counterparty = to_addr if is_outgoing else from_addr
             
-            # Get counterparty labels
+            # Get Counterparty Labels
             if is_outgoing:
                 cp_label = tx.get("to_address_label")
                 cp_entity = tx.get("to_address_entity")
@@ -661,35 +699,37 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
                 cp_label = tx.get("from_address_label")
                 cp_entity = tx.get("from_address_entity")
             
-            # Track entity interactions
+            # Track counts of potential entities interacted with
             if cp_entity:
                 entity_interactions[cp_entity] += 1
             
-            # Analyze counterparty
+            # Analyze this specific transaction
             tx_flags = []
             tx_risk = 0
             entity_info = None
             
-            # Check sanctions
+            # Counterparty Sanctions Check
             cp_sanctioned, cp_reason = check_sanctions(counterparty)
             if cp_sanctioned:
                 tx_flags.append(f"Sanctioned: {cp_reason}")
                 high_risk_counterparties.append(counterparty)
                 tx_risk += 70
             
-            # Check for mixer
+            # Counterparty Mixer Check
+            # Check label keywords
             if cp_label and any(kw in cp_label.lower() for kw in MIXER_KEYWORDS):
                 tx_flags.append("Mixer interaction")
                 mixer_interactions += 1
                 tx_risk += 40
                 entity_info = cp_label
+            # Check entity keywords
             elif cp_entity and any(kw in cp_entity.lower() for kw in MIXER_KEYWORDS):
                 tx_flags.append("Mixer interaction")
                 mixer_interactions += 1
                 tx_risk += 40
                 entity_info = cp_entity
             
-            # Check value
+            # Transaction Value Check
             if value > 50:
                 tx_flags.append(f"Very large: {value:.2f} ETH")
                 large_tx_count += 1
@@ -699,7 +739,7 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
                 large_tx_count += 1
                 tx_risk += 15
             
-            # Add entity label if exists
+            # Set display info for entity
             if cp_entity and not entity_info:
                 entity_info = cp_entity
             elif cp_label and not entity_info:
@@ -708,6 +748,7 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
             if not tx_flags:
                 tx_flags.append("Standard")
             
+            # Add to list of analyzed transactions
             recent_txs.append(AddressTransaction(
                 hash=tx_hash,
                 block_timestamp=timestamp,
@@ -719,10 +760,10 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
                 entity_interaction=entity_info
             ))
         
-        # Time-based pattern analysis
+        # Time-Based Pattern Analysis (Bursts, Late Night)
         time_patterns = analyze_time_patterns(timestamps)
         
-        # Generate address-level flags
+        # Generate Address-Level Aggregate Flags
         if mixer_interactions > 0:
             flags.append(f"🔄 Mixer interactions: {mixer_interactions} transaction(s)")
             risk_factors.append("Multiple mixer interactions")
@@ -750,15 +791,16 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
         elif total_volume > 100:
             flags.append(f"📊 High volume: {total_volume:.2f} ETH")
         
-        # Entity interaction summary
+        # Entity Interaction Summary
         entity_labels = []
         if address_label:
             entity_labels.append(f"🏷️ Address: {address_label}")
         
+        # Get top 5 entities interacted with
         for entity, count in sorted(entity_interactions.items(), key=lambda x: x[1], reverse=True)[:5]:
             entity_labels.append(f"🔗 {entity} ({count} txs)")
         
-        # Behavioral summary
+        # Behavioral Summary Dict
         behavior_summary = {
             "total_volume_eth": round(total_volume, 4),
             "avg_tx_value_eth": round(total_volume / len(transactions), 4) if transactions else 0,
@@ -771,21 +813,21 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
             "analysis_period_days": (timestamps[0] - timestamps[-1]).days if len(timestamps) > 1 else 0
         }
         
-        # Calculate risk
+        # Calculate Final Risk Score
         risk_score, _ = calculate_advanced_risk_score(
             sanctions_hit,
             mixer_interactions > 0,
             flags,
             entity_labels,
-            min(len(transactions) * 2, 50),  # Use tx count as complexity proxy
+            min(len(transactions) * 2, 50),  # Use tx frequency as proxy for complexity
             [f for f in flags if "timing" in f.lower() or "late" in f.lower()]
         )
         
-        # Adjust risk based on behavior
+        # Small penalty for burst behavior
         if time_patterns.burst_detected:
             risk_score = min(100, risk_score + 15)
         
-        # Determine risk level
+        # Determine Risk Level
         if risk_score >= 70:
             risk_level = "CRITICAL"
         elif risk_score >= 50:
@@ -798,6 +840,7 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
         if not flags:
             flags.append("✅ No suspicious patterns detected")
         
+        # Return complete analysis
         return AddressAnalysis(
             address=address,
             address_label=address_label,
@@ -821,7 +864,7 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
         raise HTTPException(status_code=400, detail=f"Error analyzing address: {str(e)}")
 
 def analyze_time_patterns(timestamps: List[datetime]) -> TimePattern:
-    """Analyze temporal patterns in transaction history"""
+    """Analyze temporal patterns in transaction history (e.g., density, timing)"""
     if len(timestamps) < 2:
         return TimePattern(
             tx_per_hour=0,
@@ -830,14 +873,14 @@ def analyze_time_patterns(timestamps: List[datetime]) -> TimePattern:
             time_details="Insufficient data"
         )
     
-    # Sort timestamps
+    # Sort timestamps newest first
     timestamps = sorted(timestamps, reverse=True)
     
-    # Calculate velocity
+    # Calculate Velocity (TX/Hour)
     time_span_hours = (timestamps[0] - timestamps[-1]).total_seconds() / 3600
     tx_per_hour = len(timestamps) / time_span_hours if time_span_hours > 0 else 0
     
-    # Detect bursts (3+ txs within 1 hour window)
+    # Detect Bursts: Check if 3 transactions happened within a 1-hour window
     burst_detected = False
     for i in range(len(timestamps) - 2):
         window = (timestamps[i] - timestamps[i+2]).total_seconds() / 3600
@@ -845,9 +888,10 @@ def analyze_time_patterns(timestamps: List[datetime]) -> TimePattern:
             burst_detected = True
             break
     
-    # Check for suspicious timing (late night activity)
+    # Check for Suspicious Timing (Late Night): >30% of txs between 2am and 5am
     suspicious_timing = sum(1 for ts in timestamps if 2 <= ts.hour <= 5) > len(timestamps) * 0.3
     
+    # Text summary details
     details = f"{tx_per_hour:.2f} tx/hour over {time_span_hours:.1f} hours"
     if burst_detected:
         details += " | Burst detected"
@@ -861,9 +905,10 @@ def analyze_time_patterns(timestamps: List[datetime]) -> TimePattern:
 
 @app.get("/")
 def root():
+    """Root endpoint to verify service status and capabilities"""
     return {
-        "service": "Enhanced Blockchain Forensics & Compliance API",
-        "version": "2.0.0",
+        "service": "Blockchain Forensics & Compliance APP",
+        "version": "1.0.0",
         "provider": "Moralis",
         "features": [
             "Deep event analysis (all event types)",
@@ -884,13 +929,14 @@ def root():
 
 @app.get("/health")
 def health():
-    """Health check endpoint with Moralis connectivity test"""
+    """Health check endpoint containing a live Moralis connectivity test"""
     try:
+        # Test connection by fetching latest block
         moralis_request("/block/latest", params={"chain": "eth"})
         return {
             "status": "healthy",
             "moralis_connected": True,
-            "api_version": "2.0.0",
+            "api_version": "1.0.0",
             "timestamp": datetime.utcnow().isoformat()
         }
     except:
@@ -902,8 +948,8 @@ def health():
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Starting Enhanced Blockchain Forensics API...")
+    print("🚀 Starting Blockchain Forensics APP...")
     print("📊 Features: Deep event analysis, token flow graphs, behavioral patterns")
     print("🔗 Moralis integration enabled")
-    print("📖 API docs: http://localhost:8001/docs")
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    print("📖 API docs: http://localhost:8002/docs")
+    uvicorn.run(app, host="0.0.0.0", port=8002)
