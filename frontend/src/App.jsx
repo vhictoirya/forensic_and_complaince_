@@ -1,10 +1,9 @@
-import React from 'react';
-import Dashboard from './components/Dashboard';
+import ForensicsDashboard from './components/ForensicsDashboard'
 
 function App() {
   return (
-    <Dashboard />
-  );
+    <ForensicsDashboard />
+  )
 }
 
-export default App;
+export default App
