@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Search, AlertTriangle, Shield, Activity, TrendingUp, Clock, Network, CheckCircle, XCircle, AlertCircle, ArrowRight, ExternalLink } from 'lucide-react';
+import { Search, AlertTriangle, Shield, Activity, TrendingUp, Clock, Network, CheckCircle, XCircle, AlertCircle, ExternalLink } from 'lucide-react';
+import WalletAttributionGraph from './WalletAttributionGraph';
+import TransactionFlowVisualization from './TransactionFlowVisualization';
 
 const ForensicsDashboard = () => {
     const [activeTab, setActiveTab] = useState('transaction');
+    const [graphView, setGraphView] = useState(null);
     const [txHash, setTxHash] = useState('');
     const [address, setAddress] = useState('');
     const [loading, setLoading] = useState(false);
@@ -136,6 +139,18 @@ const ForensicsDashboard = () => {
                         <div className="flex items-center space-x-2">
                             <Network className="w-4 h-4" />
                             <span>Address Profiling</span>
+                        </div>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('graphs')}
+                        className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'graphs'
+                            ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            }`}
+                    >
+                        <div className="flex items-center space-x-2">
+                            <TrendingUp className="w-4 h-4" />
+                            <span>Address Clustering</span>
                         </div>
                     </button>
                 </div>
@@ -333,10 +348,12 @@ const ForensicsDashboard = () => {
                                             <span className="text-slate-400">Transaction Fee:</span>
                                             <p className="text-white font-semibold mt-1">{txResult.details.transaction_fee} ETH</p>
                                         </div>
-                                        <div>
-                                            <span className="text-slate-400">Token Hops:</span>
-                                            <p className="text-white font-semibold mt-1">{txResult.details.total_hops}</p>
-                                        </div>
+                                        {txResult.details.token_flows && (
+                                            <div>
+                                                <span className="text-slate-400">Token Hops:</span>
+                                                <p className="text-white font-semibold mt-1">{txResult.details.total_hops}</p>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Decoded Call */}
@@ -357,53 +374,8 @@ const ForensicsDashboard = () => {
                                             )}
                                         </div>
                                     )}
+
                                 </div>
-
-                                {/* Token Flow Graph */}
-                                {txResult.details.token_flows && txResult.details.token_flows.length > 0 && (
-                                    <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
-                                        <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
-                                            <Activity className="w-5 h-5 text-blue-400" />
-                                            <span>Token Flow Visualizer</span>
-                                        </h3>
-                                        <div className="space-y-4">
-                                            {txResult.details.token_flows.map((flow, idx) => (
-                                                <div key={idx} className="flex items-center justify-between p-4 bg-slate-900/50 rounded-lg border border-slate-700">
-                                                    {/* From Node */}
-                                                    <div className="flex-1 text-center">
-                                                        <div className="w-10 h-10 bg-blue-900/50 rounded-full flex items-center justify-center mx-auto mb-2 border border-blue-500/30">
-                                                            <span className="text-xs text-blue-300">From</span>
-                                                        </div>
-                                                        <p className="text-xs text-slate-300 font-mono truncate max-w-[100px] mx-auto" title={flow.from_address}>
-                                                            {flow.from_address.slice(0, 6)}...{flow.from_address.slice(-4)}
-                                                        </p>
-                                                    </div>
-
-                                                    {/* Arrow & Amount */}
-                                                    <div className="flex-1 px-4 text-center">
-                                                        <div className="text-xs text-slate-400 mb-1 font-medium">
-                                                            {flow.amount_formatted} {flow.token_symbol || 'Tokens'}
-                                                        </div>
-                                                        <div className="flex items-center justify-center text-slate-600 my-1">
-                                                            <ArrowRight className="w-6 h-6" />
-                                                        </div>
-                                                        <div className="text-[10px] text-slate-500">Hop {flow.hop_number}</div>
-                                                    </div>
-
-                                                    {/* To Node */}
-                                                    <div className="flex-1 text-center">
-                                                        <div className="w-10 h-10 bg-purple-900/50 rounded-full flex items-center justify-center mx-auto mb-2 border border-purple-500/30">
-                                                            <span className="text-xs text-purple-300">To</span>
-                                                        </div>
-                                                        <p className="text-xs text-slate-300 font-mono truncate max-w-[100px] mx-auto" title={flow.to_address}>
-                                                            {flow.to_address.slice(0, 6)}...{flow.to_address.slice(-4)}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
 
                                 {/* Timing Flags */}
                                 {txResult.timing_flags.length > 0 && (
@@ -765,6 +737,40 @@ const ForensicsDashboard = () => {
                                 </div>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* Graph Visualizations Tab */}
+                {activeTab === 'graphs' && (
+                    <div className="space-y-6">
+                        {/* Graph Toggle Buttons */}
+                        <div className="flex items-center space-x-3 bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 border border-slate-700">
+                            <span className="text-sm font-medium text-slate-300">Visualization:</span>
+                            <button
+                                onClick={() => setGraphView('wallet')}
+                                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                                    graphView === 'wallet'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                }`}
+                            >
+                                💰 Wallet Attribution
+                            </button>
+                            <button
+                                onClick={() => setGraphView('flow')}
+                                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                                    graphView === 'flow'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                }`}
+                            >
+                                🔄 Transaction Flow
+                            </button>
+                        </div>
+
+                        {/* Graph Display */}
+                        {graphView === 'wallet' && <WalletAttributionGraph />}
+                        {graphView === 'flow' && <TransactionFlowVisualization />}
                     </div>
                 )}
             </div>

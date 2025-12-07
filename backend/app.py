@@ -74,15 +74,6 @@ HIGH_RISK_METHODS = {
 MIXER_KEYWORDS = ["tornado", "mixer", "tumbler", "privacy", "blender", "anonymizer"]
 
 # Pydantic Models for Data Validation and Schema Documentation
-class TokenFlow(BaseModel):
-    token_address: str         
-    token_symbol: Optional[str] 
-    from_address: str         
-    to_address: str            
-    amount: str                
-    amount_formatted: str     
-    hop_number: int           
-
 class EventAnalysis(BaseModel):
     event_type: str           
     count: int                
@@ -104,8 +95,6 @@ class TransactionDetails(BaseModel):
     transaction_fee: str
     nonce: int                 # Transaction count for sender
     decoded_call: Optional[Dict] # Details of the function called
-    token_flows: List[TokenFlow] 
-    total_hops: int            # Total number of transfers
 
 class AnalysisResult(BaseModel):
     tx_hash: str
@@ -137,6 +126,8 @@ class AddressTransaction(BaseModel):
     risk_score: int
     flags: List[str]
     entity_interaction: Optional[str]
+    direction: str  # "incoming" or "outgoing"
+    category: str  # "transfer", "exchange", "nft", "contract"
 
 class AddressAnalysis(BaseModel):
     address: str
@@ -315,58 +306,6 @@ def analyze_events(logs: List[Dict]) -> tuple[List[EventAnalysis], List[str]]:
     
     return analyses, flags
 
-def build_token_flow_graph(logs: List[Dict]) -> tuple[List[TokenFlow], int, List[str]]:
-    """Build a graph of token flows and detect cyclic patterns"""
-    flows = []
-    flags = []
-    hop_number = 0
-    seen_addresses = set()
-    
-    # Iterate through logs to find Transfer events
-    for log in logs:
-        decoded = log.get("decoded_event")
-        # Only interested in standard ERC20 Transfers
-        if not decoded or decoded.get("label") != "Transfer":
-            continue
-        
-        params = {p["name"]: p["value"] for p in decoded.get("params", [])}
-        # Ensure 'from' and 'to' params exist
-        if not all(k in params for k in ["from", "to"]):
-            continue
-        
-        hop_number += 1
-        from_addr = params["from"]
-        to_addr = params["to"]
-        # Handle 'value' vs 'amount' naming for different standards
-        amount = params.get("value", params.get("amount", 0))
-        
-        # Track addresses for circular flow detection (Wash Trading Pattern)
-        seen_addresses.add(from_addr.lower())
-        if to_addr.lower() in seen_addresses:
-            flags.append("⚠️ Circular token flow detected (potential wash trading)")
-        seen_addresses.add(to_addr.lower())
-        
-        # Format amount to human-readable (assuming 18 decimals default)
-        try:
-            amount_int = int(amount)
-            decimals = 18  # Default, could be improved with token metadata fetch
-            amount_formatted = f"{amount_int / (10 ** decimals):.6f}"
-        except:
-            amount_formatted = str(amount)
-        
-        # Add to flow list
-        flows.append(TokenFlow(
-            token_address=log.get("address", ""),
-            token_symbol=log.get("token_symbol"),
-            from_address=from_addr,
-            to_address=to_addr,
-            amount=str(amount),
-            amount_formatted=amount_formatted,
-            hop_number=hop_number
-        ))
-    
-    return flows, hop_number, flags
-
 def analyze_timing(timestamp_str: str) -> List[str]:
     """Analyze transaction timing for suspicious patterns (e.g., late night hours)"""
     flags = []
@@ -388,22 +327,12 @@ def analyze_timing(timestamp_str: str) -> List[str]:
     
     return flags
 
-def calculate_complexity_score(token_flows: List[TokenFlow], event_count: int) -> int:
+def calculate_complexity_score(event_count: int) -> int:
     """Calculate a numeric score (0-100) representing transaction complexity"""
     score = 0
     
-    # Points for number of token hops
-    score += min(len(token_flows) * 5, 30)
-    
     # Points for number of events
-    score += min(event_count * 2, 20)
-    
-    # Points for number of unique addresses involved
-    unique_addrs = len(set(
-        [f.from_address for f in token_flows] + 
-        [f.to_address for f in token_flows]
-    ))
-    score += min(unique_addrs * 3, 25)
+    score += min(event_count * 2, 50)
     
     # Cap score at 100
     return min(score, 100)
@@ -473,7 +402,6 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
     
     Returns comprehensive risk analysis including:
     - Event-level analysis (approvals, swaps, transfers)
-    - Token flow graphs with hop tracking
     - Entity recognition via Moralis labels
     - Timing and complexity analysis
     - Multi-factor risk scoring
@@ -513,12 +441,6 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
         event_analyses, event_flags = analyze_events(tx_data.get("logs", []))
         flags.extend(event_flags)
         
-        # Build Token Flow Graph
-        token_flows, total_hops, flow_flags = build_token_flow_graph(
-            tx_data.get("logs", [])
-        )
-        flags.extend(flow_flags)
-        
         # Value Analysis
         if value_eth > 100:
             flags.append(f"💰 Very high value: {value_eth:.2f} ETH (~${value_eth * 2500:.2f})")
@@ -548,7 +470,6 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
         
         # Calculate Complexity Score
         complexity_score = calculate_complexity_score(
-            token_flows, 
             len(tx_data.get("logs", []))
         )
         
@@ -597,9 +518,7 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
                 gas_price=f"{int(tx_data.get('gas_price', 0)) / 1e9:.2f} Gwei", # Convert Wei to Gwei
                 transaction_fee=tx_data.get("transaction_fee", "0"),
                 nonce=nonce,
-                decoded_call=decoded_call,
-                token_flows=token_flows,
-                total_hops=total_hops
+                decoded_call=decoded_call
             ),
             event_analysis=event_analyses,
             sanctions_check=sanctions_hit,
@@ -748,6 +667,23 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
             if not tx_flags:
                 tx_flags.append("Standard")
             
+            # Determine transaction direction
+            direction = "outgoing" if is_outgoing else "incoming"
+            
+            # Determine transaction category
+            category = "transfer"  # default
+            entity_lower = (entity_info or "").lower()
+            
+            # Check for exchanges
+            if any(keyword in entity_lower for keyword in ["exchange", "binance", "coinbase", "kraken", "uniswap", "1inch", "sushiswap", "pancakeswap"]):
+                category = "exchange"
+            # Check for NFT platforms
+            elif any(keyword in entity_lower for keyword in ["opensea", "blur", "looksrare", "x2y2", "nft", "beanz", "azuki"]):
+                category = "nft"
+            # Check for contracts (if entity exists but not exchange/NFT)
+            elif entity_info and not category in ["exchange", "nft"]:
+                category = "contract"
+            
             # Add to list of analyzed transactions
             recent_txs.append(AddressTransaction(
                 hash=tx_hash,
@@ -757,7 +693,9 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
                 value=f"{value:.4f} ETH",
                 risk_score=min(100, tx_risk),
                 flags=tx_flags,
-                entity_interaction=entity_info
+                entity_interaction=entity_info,
+                direction=direction,
+                category=category
             ))
         
         # Time-Based Pattern Analysis (Bursts, Late Night)
@@ -799,6 +737,26 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
         # Get top 5 entities interacted with
         for entity, count in sorted(entity_interactions.items(), key=lambda x: x[1], reverse=True)[:5]:
             entity_labels.append(f"🔗 {entity} ({count} txs)")
+        
+        # Calculate category summaries for frontend cards
+        incoming_txs = [tx for tx in recent_txs if tx.direction == "incoming"]
+        outgoing_txs = [tx for tx in recent_txs if tx.direction == "outgoing"]
+        exchange_txs = [tx for tx in recent_txs if tx.category == "exchange"]
+        nft_txs = [tx for tx in recent_txs if tx.category == "nft"]
+        
+        # Calculate totals (parse ETH values)
+        def parse_eth_value(value_str):
+            try:
+                return float(value_str.replace(" ETH", ""))
+            except:
+                return 0.0
+        
+        incoming_total = sum(parse_eth_value(tx.value) for tx in incoming_txs)
+        outgoing_total = sum(parse_eth_value(tx.value) for tx in outgoing_txs)
+        
+        # Get unique exchange and NFT platforms
+        exchange_platforms = list(set(tx.entity_interaction for tx in exchange_txs if tx.entity_interaction))
+        nft_platforms = list(set(tx.entity_interaction for tx in nft_txs if tx.entity_interaction))
         
         # Behavioral Summary Dict
         behavior_summary = {
@@ -912,7 +870,6 @@ def root():
         "provider": "Moralis",
         "features": [
             "Deep event analysis (all event types)",
-            "Token flow graph construction",
             "Multi-factor risk scoring",
             "Behavioral pattern detection",
             "Entity label extraction",
@@ -949,7 +906,7 @@ def health():
 if __name__ == "__main__":
     import uvicorn
     print("🚀 Starting Blockchain Forensics APP...")
-    print("📊 Features: Deep event analysis, token flow graphs, behavioral patterns")
+    print("📊 Features: Deep event analysis, behavioral patterns")
     print("🔗 Moralis integration enabled")
     print("📖 API docs: http://localhost:8002/docs")
     uvicorn.run(app, host="0.0.0.0", port=8002)
