@@ -529,6 +529,11 @@ async def analyze_transaction(tx_hash: str, chain: str = "eth"):
             timing_flags=timing_flags
         )
         
+    except HTTPException as e:
+        # specific handling for Moralis 400 Bad Request (invalid hash)
+        if e.status_code == 400 and "Moralis API error" in str(e.detail):
+             raise HTTPException(status_code=400, detail="Please put in an eth transaction hash")
+        raise e
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error analyzing transaction: {str(e)}")
 
@@ -816,8 +821,11 @@ async def analyze_address(address: str, chain: str = "eth", limit: int = 25):
             behavior_summary=behavior_summary
         )
         
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        # specific handling for Moralis 400 Bad Request (invalid address)
+        if e.status_code == 400 and "Moralis API error" in str(e.detail):
+             raise HTTPException(status_code=400, detail="Please put in an eth address")
+        raise e
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error analyzing address: {str(e)}")
 
